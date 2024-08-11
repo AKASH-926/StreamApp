@@ -229,6 +229,10 @@ export class MediaManager {
         //A dummy stream created to replace the tracks when camera is turned off.
         this.dummyCanvas = document.createElement("canvas");
 
+        this.dummyCanvasTitle = "Stream is off";
+
+        this.switchVideoCameraMediaConstraints = {};
+
         // It should be compatible with previous version
         if (this.mediaConstraints) {
             if (this.mediaConstraints.video == "camera") {
@@ -400,14 +404,48 @@ export class MediaManager {
 
                     var positionX = (canvas.width - cameraWidth) - this.camera_margin;
                     var positionY;
-
-                    if (this.camera_location == "top") {
-                        positionY = this.camera_margin;
-                    } else { //if not top, make it bottom
-                        //draw camera on right bottom corner
-                        positionY = (canvas.height - cameraHeight) - this.camera_margin;
+                
+                    switch (this.camera_location) {
+                        case "top-left":
+                            positionX = this.camera_margin;
+                            positionY = this.camera_margin;
+                            break;
+                        case "top-right":
+                            positionX = (canvas.width - cameraWidth) - this.camera_margin;
+                            positionY = this.camera_margin;
+                            break;
+                        case "bottom-left":
+                            positionX = this.camera_margin;
+                            positionY = (canvas.height - cameraHeight) - this.camera_margin;
+                            break;
+                        case "bottom-right":
+                        default:
+                            // Default to bottom-right if not specified
+                            positionX = (canvas.width - cameraWidth) - this.camera_margin;
+                            positionY = (canvas.height - cameraHeight) - this.camera_margin;
+                            break;
                     }
+                    // Draw shadow effect
+                    canvasContext.save(); 
+                    canvasContext.shadowColor = 'rgba(0, 0, 0, 0.6)';
+                    canvasContext.shadowBlur = 1;
+                    canvasContext.shadowOffsetX = 0;
+                    canvasContext.shadowOffsetY = 0;
+                    // Draw the shadow circle
+                    canvasContext.beginPath();
+                    canvasContext.arc(positionX + cameraWidth / 2, positionY + cameraHeight / 2, Math.min(cameraWidth, cameraHeight) / 2 + canvasContext.shadowBlur, 0, Math.PI * 2);
+                    canvasContext.fill();
+                    // Restore canvas state to remove shadow properties
+                    canvasContext.restore();
+                    // Draw the circular camera video
+                    canvasContext.save();
+                    canvasContext.beginPath();
+                    canvasContext.arc(positionX + cameraWidth / 2, positionY + cameraHeight / 2, Math.min(cameraWidth, cameraHeight) / 2, 0, Math.PI * 2);
+                    canvasContext.clip();
+                    // Draw the camera video
                     canvasContext.drawImage(cameraVideo, positionX, positionY, cameraWidth, cameraHeight);
+                    // Restore canvas state to remove clipping path
+                    canvasContext.restore();
                 }, 66);
             });
         }, true)
@@ -564,7 +602,7 @@ export class MediaManager {
      * @param {*} mediaConstraints : media constaint
      * @param {*} func : callback on success. The stream which is got, is passed as parameter to this function
      */
-    navigatorDisplayMedia(mediaConstraints, func) {
+    navigatorDisplayMedia(mediaConstraints, func, streamId) {
         return navigator.mediaDevices.getDisplayMedia(mediaConstraints)
             .then((stream) => {
                 if (typeof func != "undefined") {
@@ -586,7 +624,8 @@ export class MediaManager {
 
                         this.openStream(mediaConstraints);
                     } else {
-                        this.switchVideoCameraCapture(streamId);
+                        if (streamId) this.switchVideoCameraCapture(streamId);
+                        throw error;
                     }
                 }
             });
@@ -611,10 +650,12 @@ export class MediaManager {
 
         // Check Media Constraint video value screen or screen + camera
         if (this.publishMode == "screen+camera" || this.publishMode == "screen") {
-            return this.navigatorDisplayMedia(mediaConstraints).then(stream => {
+            return this.navigatorDisplayMedia(mediaConstraints,()=>{},streamId).then(stream => {
                 if (this.smallVideoTrack)
                     this.smallVideoTrack.stop();
                 return this.prepareStreamTracks(mediaConstraints, audioConstraint, stream, streamId);
+            }).catch(error => {
+                this.callbackError(error.name, error.message);
             });
         }
         else {
@@ -1106,10 +1147,19 @@ export class MediaManager {
                     //Adjust video source only if there is a matching device id with the given one.
                     //It creates problems if we don't check that since video can be just true to select default cam and it is like that in many cases.
                     if (devices[i].deviceId == deviceId) {
-                        if (this.mediaConstraints.video !== true)
+                        if (this.mediaConstraints.video !== true){
                             this.mediaConstraints.video.deviceId = {exact: deviceId};
-                        else
+                            this.mediaConstraints.video = {
+                              ...this.mediaConstraints.video,
+                              ...this.switchVideoCameraMediaConstraints,  // learnyst
+                            };
+                        } else {
                             this.mediaConstraints.video = {deviceId: {exact: deviceId}};
+                            this.mediaConstraints.video = {
+                                ...this.mediaConstraints.video,
+                                ...this.switchVideoCameraMediaConstraints,  // learnyst
+                              };
+                        }   
                         break;
                     }
                 }
@@ -1236,7 +1286,45 @@ export class MediaManager {
      * Tihs method create a black frame to reduce data transfer
      */
     getBlackVideoTrack() {
-		this.dummyCanvas.getContext('2d').fillRect(0, 0, 320, 240);
+        const availableWidth = window.innerWidth; // Full available width
+        const aspectRatio = 16 / 9;
+        const canvasWidth = availableWidth;
+        const canvasHeight = canvasWidth / aspectRatio;
+        const scale = 2; // Scale factor to increase resolution
+    
+        // Set canvas size to a higher resolution and then scale down
+        this.dummyCanvas.width = canvasWidth * scale;
+        this.dummyCanvas.height = canvasHeight * scale;
+    
+        const ctx = this.dummyCanvas.getContext('2d');
+        ctx.scale(scale, scale); // Scale down to fit original size
+        ctx.fillStyle = 'black';
+        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+        
+        // Draw the name in the center
+        const text = this.dummyCanvasTitle;
+        ctx.fillStyle = 'white';
+        ctx.font = '48px Arial';
+        const textWidth = ctx.measureText(text).width;
+        const textHeight = 48;
+        ctx.fillText(text, (canvasWidth - textWidth) / 2, (canvasHeight + textHeight) / 2 + 60);
+    
+        // Draw a circular container with the first letter
+        const circleRadius = 80; // Adjust size as needed
+        const circleX = canvasWidth / 2;
+        const circleY = (canvasHeight + textHeight) / 2 - circleRadius - 30; // Position above the text
+        ctx.fillStyle = 'lightgrey';
+        ctx.beginPath();
+        ctx.arc(circleX, circleY, circleRadius, 0, 2 * Math.PI);
+        ctx.fill();
+    
+        // Draw the first letter inside the circle
+        const firstLetter = text.charAt(0).toUpperCase();
+        ctx.fillStyle = 'black';
+        ctx.font = '48px Arial';
+        const letterWidth = ctx.measureText(firstLetter).width;
+        ctx.fillText(firstLetter, circleX - letterWidth / 2, circleY + textHeight / 4);
+    
 
 		//REFACTOR: it's not good to set to a replacement stream
 		this.replacementStream = this.dummyCanvas.captureStream();
