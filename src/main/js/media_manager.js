@@ -229,7 +229,9 @@ export class MediaManager {
         //A dummy stream created to replace the tracks when camera is turned off.
         this.dummyCanvas = document.createElement("canvas");
 
-        this.dummyCanvasTitle = "Stream is off"
+        this.dummyCanvasTitle = "Stream is off";
+
+        this.switchVideoCameraMediaConstraints = {};
 
         // It should be compatible with previous version
         if (this.mediaConstraints) {
@@ -1145,10 +1147,19 @@ export class MediaManager {
                     //Adjust video source only if there is a matching device id with the given one.
                     //It creates problems if we don't check that since video can be just true to select default cam and it is like that in many cases.
                     if (devices[i].deviceId == deviceId) {
-                        if (this.mediaConstraints.video !== true)
+                        if (this.mediaConstraints.video !== true){
                             this.mediaConstraints.video.deviceId = {exact: deviceId};
-                        else
+                            this.mediaConstraints.video = {
+                              ...this.mediaConstraints.video,
+                              ...this.switchVideoCameraMediaConstraints,  // learnyst
+                            };
+                        } else {
                             this.mediaConstraints.video = {deviceId: {exact: deviceId}};
+                            this.mediaConstraints.video = {
+                                ...this.mediaConstraints.video,
+                                ...this.switchVideoCameraMediaConstraints,  // learnyst
+                              };
+                        }   
                         break;
                     }
                 }
