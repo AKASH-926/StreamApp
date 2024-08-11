@@ -1,6 +1,6 @@
 {
   "name": "@sridhardvvce/webrtc_adaptor",
-  "version": "2.10.0-u",
+  "version": "2.10.0-af",
   "description": "WebRTC Adaptor for implementing a front end using Ant Media Server.",
   "main": "dist/index.js",
   "module": "dist/es/index.js",
