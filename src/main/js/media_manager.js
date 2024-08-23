@@ -233,6 +233,13 @@ export class MediaManager {
 
         this.switchVideoCameraMediaConstraints = {};
 
+        this.dummyCanvasProperties = {
+            canvasWidth: 1280,
+            canvasHeight: 720,
+            canvasTitleFontSize: '40px',
+            canvasCircleRadius: 65,
+        }
+
         // It should be compatible with previous version
         if (this.mediaConstraints) {
             if (this.mediaConstraints.video == "camera") {
@@ -1286,59 +1293,64 @@ export class MediaManager {
      * Tihs method create a black frame to reduce data transfer
      */
     getBlackVideoTrack() {
-        const availableWidth = window.innerWidth; // Full available width
-        const aspectRatio = 16 / 9;
-        const canvasWidth = availableWidth;
-        const canvasHeight = canvasWidth / aspectRatio;
-        const scale = 2; // Scale factor to increase resolution
-    
-        // Set canvas size to a higher resolution and then scale down
-        this.dummyCanvas.width = canvasWidth * scale;
-        this.dummyCanvas.height = canvasHeight * scale;
-    
+        const canvasWidth = this.dummyCanvasProperties.canvasWidth
+        const canvasHeight = this.dummyCanvasProperties.canvasHeight
+        
+        // Set canvas size to the desired resolution directly
+        this.dummyCanvas.width = canvasWidth;
+        this.dummyCanvas.height = canvasHeight;
+        
         const ctx = this.dummyCanvas.getContext('2d');
-        ctx.scale(scale, scale); // Scale down to fit original size
+        
+        // Clear the canvas before drawing
+        ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+    
+        // Draw the black background
         ctx.fillStyle = 'black';
         ctx.fillRect(0, 0, canvasWidth, canvasHeight);
         
-        // Draw the name in the center
+        // Set up text properties
         const text = this.dummyCanvasTitle;
         ctx.fillStyle = 'white';
-        ctx.font = '48px Arial';
-        const textWidth = ctx.measureText(text).width;
-        const textHeight = 48;
-        ctx.fillText(text, (canvasWidth - textWidth) / 2, (canvasHeight + textHeight) / 2 + 60);
+        ctx.font = `${this.dummyCanvasProperties.canvasTitleFontSize} Arial`; // Adjusted font size for lower resolution
+        ctx.textAlign = 'center'; // Center text horizontally
+        ctx.textBaseline = 'middle'; // Center text vertically
+        
+        // Calculate text position
+        const textX = canvasWidth / 2;
+        const textY = canvasHeight / 2;
+    
+        // Draw the name in the center
+        ctx.fillText(text, textX, textY);
     
         // Draw a circular container with the first letter
-        const circleRadius = 80; // Adjust size as needed
+        const circleRadius = this.dummyCanvasProperties.canvasCircleRadius; // Adjust size for lower resolution
         const circleX = canvasWidth / 2;
-        const circleY = (canvasHeight + textHeight) / 2 - circleRadius - 30; // Position above the text
+        const circleY = textY - circleRadius - 20; // Position above the text
         ctx.fillStyle = 'lightgrey';
         ctx.beginPath();
         ctx.arc(circleX, circleY, circleRadius, 0, 2 * Math.PI);
         ctx.fill();
-    
+        
         // Draw the first letter inside the circle
         const firstLetter = text.charAt(0).toUpperCase();
         ctx.fillStyle = 'black';
-        ctx.font = '48px Arial';
-        const letterWidth = ctx.measureText(firstLetter).width;
-        ctx.fillText(firstLetter, circleX - letterWidth / 2, circleY + textHeight / 4);
+        ctx.font = '36px Arial'; // Adjusted font size for lower resolution
+        ctx.textAlign = 'center'; // Center letter horizontally
+        ctx.textBaseline = 'middle'; // Center letter vertically
+        ctx.fillText(firstLetter, circleX, circleY);
     
-
-		//REFACTOR: it's not good to set to a replacement stream
-		this.replacementStream = this.dummyCanvas.captureStream();
-		 //We need to send black frames within a time interval, because when the user turn off the camera,
-        //player can't connect to the sender since there is no data flowing. Sending a black frame in each 3 seconds resolves it.
+        // Capture the stream and start the black frame timer
+        this.replacementStream = this.dummyCanvas.captureStream();
         if (this.blackFrameTimer == null) {
             this.blackFrameTimer = setInterval(() => {
                 this.getBlackVideoTrack();
             }, 3000);
         }
-
+    
         this.blackVideoTrack = this.replacementStream.getVideoTracks()[0];
         return this.blackVideoTrack;
-	}
+    }
 
     /**
      * Silent audio track
